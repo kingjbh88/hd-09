@@ -56,6 +56,31 @@ function escapeHtml(str){
   });
 }
 
+/* ====== 품명(영문) 키워드 기반 한글 카테고리 자동 분류 ======
+   실제 열에 카테고리 구분이 없어서, 품명에 포함된 키워드로 추정 분류합니다.
+   따라서 100% 정확하지 않을 수 있으며, 참고용 분류입니다. */
+var CATEGORY_RULES = [
+  { label: '하부체',      keywords: ['TRACK', 'SHOE', 'ROLLER', 'IDLER', 'SPROCKET', 'UNDERCARRIAGE', 'CHAIN'] },
+  { label: '투스류',      keywords: ['TOOTH', 'TEETH', 'ADAPTER', 'SIDE CUTTER', 'CUTTING EDGE'] },
+  { label: '유압 부품',   keywords: ['HYDRAULIC', 'PUMP', 'VALVE', 'CYLINDER', 'HOSE', 'SEAL KIT', 'O-RING', 'MOTOR'] },
+  { label: '엔진 부품',   keywords: ['ENGINE', 'PISTON', 'TURBO', 'INJECTOR', 'CRANKSHAFT', 'RADIATOR', 'THERMOSTAT', 'MUFFLER', 'EXHAUST', 'FAN BELT'] },
+  { label: '전기 / 전장', keywords: ['ELECTRIC', 'SENSOR', 'SWITCH', 'HARNESS', 'WIRING', 'BATTERY', 'ALTERNATOR', 'STARTER', 'RELAY', 'FUSE', 'LAMP', 'BULB', 'CONTROLLER'] },
+  { label: '필터 / 오일류', keywords: ['FILTER', 'OIL', 'LUBRICANT', 'GREASE', 'ELEMENT'] }
+];
+var DEFAULT_CATEGORY = '기타 부품';
+var CATEGORY_LABELS = CATEGORY_RULES.map(function(r){ return r.label; }).concat([DEFAULT_CATEGORY]);
+
+function classifyByName(name){
+  var upper = String(name || '').toUpperCase();
+  for (var i = 0; i < CATEGORY_RULES.length; i++) {
+    var rule = CATEGORY_RULES[i];
+    for (var j = 0; j < rule.keywords.length; j++) {
+      if (upper.indexOf(rule.keywords[j]) !== -1) return rule.label;
+    }
+  }
+  return DEFAULT_CATEGORY;
+}
+
 function loadPartsData(){
   if (dataLoaded || dataLoading) return Promise.resolve();
   dataLoading = true;
@@ -75,15 +100,25 @@ function loadPartsData(){
       for (var i = 1; i < rows.length; i++) {
         var r = rows[i];
         if (!r || r.length === 0) continue;
-        var category = (r[0] || '').toString().trim();
-        var group    = (r[1] || '').toString().trim();
-        var oldPn    = (r[2] || '').toString().trim();
-        var newPn    = (r[3] || '').toString().trim();
-        var name     = (r[4] || '').toString().trim();
-        var cycle    = (r[5] || '').toString().trim();
-        var qty      = (r[6] || '').toString().trim();
-        if (!category && !group && !name && !oldPn && !newPn) continue;
-        list.push({ category: category, group: group, oldPn: oldPn, newPn: newPn, name: name, cycle: cycle, qty: qty, source: f.label });
+        var figureNo   = (r[0] || '').toString().trim(); // 1열: Figure No. (도면번호)
+        var consumable = (r[1] || '').toString().trim(); // 2열: 소모 (RMP/RRP)
+        var oldPn      = (r[2] || '').toString().trim(); // 3열: 원품번
+        var newPn      = (r[3] || '').toString().trim(); // 4열: 최신품번
+        var group      = (r[4] || '').toString().trim(); // 5열: 부품그룹 (영문)
+        var name       = (r[5] || '').toString().trim(); // 6열: 품명
+        var cycle      = (r[6] || '').toString().trim(); // 7열: 교환주기
+        if (!figureNo && !group && !name && !oldPn && !newPn) continue;
+        list.push({
+          figureNo: figureNo,
+          consumable: consumable,
+          oldPn: oldPn,
+          newPn: newPn,
+          group: group,
+          name: name,
+          cycle: cycle,
+          category: classifyByName(name),
+          source: f.label
+        });
       }
       return list;
     });
@@ -105,9 +140,6 @@ function loadPartsData(){
 
 function buildCategoryFilters(){
   var wrap = document.getElementById('catFilters');
-  var cats = [];
-  partsData.forEach(function(p){ if (p.category && cats.indexOf(p.category) === -1) cats.push(p.category); });
-
   wrap.innerHTML = '';
   var allBtn = document.createElement('button');
   allBtn.className = 'catBtn active';
@@ -116,7 +148,7 @@ function buildCategoryFilters(){
   allBtn.dataset.cat = '';
   wrap.appendChild(allBtn);
 
-  cats.forEach(function(c){
+  CATEGORY_LABELS.forEach(function(c){
     var btn = document.createElement('button');
     btn.className = 'catBtn';
     btn.type = 'button';
@@ -149,8 +181,8 @@ function renderResults(){
       return p.name.toLowerCase().indexOf(q) !== -1 ||
              p.oldPn.toLowerCase().indexOf(q) !== -1 ||
              p.newPn.toLowerCase().indexOf(q) !== -1 ||
-             p.category.toLowerCase().indexOf(q) !== -1 ||
-             p.group.toLowerCase().indexOf(q) !== -1;
+             p.group.toLowerCase().indexOf(q) !== -1 ||
+             p.category.toLowerCase().indexOf(q) !== -1;
     });
   }
 
@@ -174,8 +206,8 @@ function renderResults(){
       '<td>' + escapeHtml(p.name) + '</td>' +
       '<td>' + escapeHtml(p.newPn) + '</td>' +
       '<td style="color:#999">' + escapeHtml(p.oldPn) + '</td>' +
+      '<td>' + escapeHtml(p.consumable) + '</td>' +
       '<td>' + escapeHtml(p.cycle) + '</td>' +
-      '<td>' + escapeHtml(p.qty) + '</td>' +
     '</tr>';
   }).join('');
 
@@ -185,7 +217,7 @@ function renderResults(){
 
   resultsEl.innerHTML =
     '<div style="overflow-x:auto"><table class="partsTable">' +
-    '<thead><tr><th>카테고리</th><th>부품그룹</th><th>품명</th><th>최신품번</th><th>원품번</th><th>교환주기</th><th>단위수량</th></tr></thead>' +
+    '<thead><tr><th>분류(추정)</th><th>부품그룹</th><th>품명</th><th>최신품번</th><th>원품번</th><th>소모</th><th>교환주기</th></tr></thead>' +
     '<tbody>' + rowsHtml + '</tbody></table></div>' + moreNotice;
 }
 
