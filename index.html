@@ -170,6 +170,15 @@ function buildCategoryFilters(){
 function renderResults(){
   var sr = document.getElementById('sr');
   var resultsEl = document.getElementById('searchResults');
+
+  // 검색어도 없고 카테고리 선택도 없으면, 전체 목록을 나열하지 않고 안내만 표시
+  if (!currentQuery && !selectedCategory) {
+    sr.style.color = '#777';
+    sr.textContent = '총 ' + partsData.length + '개의 부품 데이터가 있습니다. 검색어를 입력하거나 카테고리를 선택하세요.';
+    resultsEl.innerHTML = '';
+    return;
+  }
+
   var filtered = partsData;
 
   if (selectedCategory) {
@@ -187,11 +196,7 @@ function renderResults(){
   }
 
   sr.style.color = '#777';
-  if (!currentQuery && !selectedCategory) {
-    sr.textContent = '총 ' + partsData.length + '개의 부품 데이터가 있습니다. 검색어를 입력하거나 카테고리를 선택하세요.';
-  } else {
-    sr.textContent = filtered.length + '개의 부품이 검색되었습니다.';
-  }
+  sr.textContent = filtered.length + '개의 부품이 검색되었습니다.';
 
   if (filtered.length === 0) {
     resultsEl.innerHTML = '<p style="color:#999;padding:20px 0">검색 결과가 없습니다.</p>';
